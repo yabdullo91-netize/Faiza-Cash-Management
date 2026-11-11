@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16-alpine
+    env_file: .env
+    environment:
+      POSTGRES_DB: \${POSTGRES_DB}
+      POSTGRES_USER: \${POSTGRES_USER}
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  api:
+    build: ./src/FaizaCash.Api
+    env_file: .env
+    environment:
+      ConnectionStrings__CashDb: \${CONNECTIONSTRINGS__CASHDB}
+      Jwt__Issuer: \${JWT__ISSUER}
+      Jwt__Audience: \${JWT__AUDIENCE}
+      Jwt__Key: \${JWT__KEY}
+      Seed__AdminLogin: \${SEED__ADMINLOGIN}
+      Seed__AdminPassword: \${SEED__ADMINPASSWORD}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  postgres-data:
