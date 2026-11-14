@@ -1,0 +1,11 @@
+import React from 'react';
+import {Empty,Pager} from '../components/ui';
+import {dateTimeText,roleLabels} from '../utils/format.js';
+export function readableDetails(value) {try{return JSON.stringify(JSON.parse(value),null,2);}catch{return 'Подробности недоступны';}}
+const valueText=value=>Array.isArray(value)?value.map(x=>roleLabels[x]||String(x)).join(', '):value===null||value===undefined?'Не указано':typeof value==='boolean'?(value?'Да':'Нет'):({draft:'Черновик',posted:'Проведено',income:'Приход',expense:'Расход'}[String(value)]||String(value));
+const detailLabels={Name:'Название',Code:'Код',Active:'Активность',FullName:'Имя',Currency:'Валюта',Amount:'Сумма',Description:'Основание',Date:'Дата',Type:'Тип',Status:'Состояние',Roles:'Роли'};
+function ChangeDetails({details}){let data;try{data=JSON.parse(details);}catch{return null;}return data.changes?<ul className="audit-changes">{Object.entries(data.changes).map(([name,value])=><li key={name}>{detailLabels[name]||name}: <span>{valueText(value.before)}</span> → <strong>{valueText(value.after)}</strong></li>)}</ul>:null;}
+export function AuditPage({data,options,route,onChange,onPage}) {
+  const filter=(key,value)=>onChange({[key]:value,index:1});
+  return <section className="panel"><div className="panel-heading"><div><h2>История действий</h2><p>Время Душанбе · только чтение. Служебные события сохраняются в базе.</p></div></div><div className="table-scroll"><table><thead><tr><th>Время</th><th>Сотрудник</th><th>Действие</th><th>Описание</th></tr></thead><tbody>{data.items.map(row=><tr key={row.id}><td>{dateTimeText(row.createdAt)}</td><td>{row.userName}</td><td><strong>{row.actionName}</strong><small>{row.entityName}</small></td><td className="audit-description"><p>{row.description}</p><ChangeDetails details={row.details}/><details><summary>Технические подробности</summary><dl><dt>Событие</dt><dd>{row.action}</dd><dt>Объект</dt><dd>{row.entity} {row.entityId?'№'+row.entityId:''}</dd></dl><pre>{readableDetails(row.details)}</pre></details></td></tr>)}</tbody></table>{!data.items.length&&<Empty text="Событий по выбранным фильтрам нет. Измените период или включите служебные события."/>}</div><Pager index={data.page} total={data.total} onChange={onPage}/></section>;
+}

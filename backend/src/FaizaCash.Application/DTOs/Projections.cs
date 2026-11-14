@@ -1,0 +1,3 @@
+﻿using FaizaCash.Domain;
+namespace FaizaCash.Application;
+public static class Projections { public static UserDto Public(this User u) => new(u.Id,u.Login,u.FullName,u.Active,u.MustChangePassword,u.UserRoles.Select(x=>x.Role.Code).OrderBy(x=>x).ToArray()); public static object View(this CashOperation o) => new { o.Id,o.CashboxId,o.Date,o.Type,o.Status,o.Amount,o.Description,o.CategoryId,category=o.Category?.Name,o.CounterpartyId,counterparty=o.Counterparty?.Name,o.DocumentTypeId,o.DocumentNumber,o.IsReversal,o.ReversalOfId,o.ReversalId,o.ReversalReason,authorId=o.CreatedBy,createdBy=o.Author?.FullName,o.CreatedAt,o.PostedAt,o.Version }; }

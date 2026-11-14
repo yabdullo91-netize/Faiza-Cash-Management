@@ -1,6 +1,10 @@
 .env
+.env.docker
 **/bin/
 **/obj/
+**/node_modules/
+**/dist/
+.runtime/
+*.log
 .vs/
 *.user
-uploads/

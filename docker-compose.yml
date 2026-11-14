@@ -1,32 +1,40 @@
 services:
   db:
-    image: postgres:16-alpine
-    env_file: .env
+    image: postgres:18.3-alpine
     environment:
-      POSTGRES_DB: \${POSTGRES_DB}
-      POSTGRES_USER: \${POSTGRES_USER}
-      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: faiza_cash
+      POSTGRES_USER: faiza_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data-v2:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
+      test: [CMD-SHELL, 'pg_isready -U faiza_app -d faiza_cash']
+      interval: 3s
       timeout: 5s
-      retries: 10
+      retries: 20
   api:
-    build: ./src/FaizaCash.Api
-    env_file: .env
+    build: ./backend
     environment:
-      ConnectionStrings__CashDb: \${CONNECTIONSTRINGS__CASHDB}
-      Jwt__Issuer: \${JWT__ISSUER}
-      Jwt__Audience: \${JWT__AUDIENCE}
-      Jwt__Key: \${JWT__KEY}
-      Seed__AdminLogin: \${SEED__ADMINLOGIN}
-      Seed__AdminPassword: \${SEED__ADMINPASSWORD}
-    ports:
-      - "8080:8080"
+      ConnectionStrings__CashDb: Host=db;Database=faiza_cash;Username=faiza_app;Password=${POSTGRES_PASSWORD}
+      Jwt__Key: ${JWT__KEY:?Set JWT__KEY}
+      Jwt__Issuer: FaizaCash
+      Jwt__Audience: FaizaCash
+      Seed__AdminLogin: ${SEED__ADMINLOGIN:-admin}
+      Seed__AdminPassword: ${SEED__ADMINPASSWORD:?Set SEED__ADMINPASSWORD}
+      ASPNETCORE_ENVIRONMENT: Development
+      Frontend__Origin: http://localhost:8080
+      AllowedHosts: localhost;127.0.0.1;api
+      Logs__Directory: /tmp/faiza-logs
     depends_on:
       db:
         condition: service_healthy
+    ports:
+      - '127.0.0.1:5080:8080'
+  frontend:
+    build: ./frontend
+    ports:
+      - '127.0.0.1:8080:80'
+    depends_on:
+      - api
 volumes:
-  postgres-data:
+  postgres-data-v2:

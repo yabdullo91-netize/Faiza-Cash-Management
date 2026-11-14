@@ -1,0 +1,14 @@
+import fs from 'node:fs';import {spawnSync} from 'node:child_process';import assert from 'node:assert/strict';
+const cfg=JSON.parse(fs.readFileSync('.runtime/local.json','utf8'));
+const fields=Object.fromEntries(cfg.ConnectionStrings__CashDb.split(';').map(x=>x.split('=')));const database=fields.Database+'_test';
+assert.match(database,/^faiza_[a-z0-9]+_test$/);
+const env={...process.env,PGPASSWORD:fields.Password};const bin=process.env.PG_BIN||'C:/Program Files/PostgreSQL/18/bin';
+const run=(tool,args,input)=>{const r=spawnSync(bin+'/'+tool+'.exe',['-h','127.0.0.1','-U',fields.Username,'-d',database,'-w',...args],{env,input,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+const totals=()=>run('psql',['-At','-v','ON_ERROR_STOP=1'],`SELECT json_build_object('operations',(SELECT count(*) FROM "Operations"),'posted',(SELECT count(*) FROM "Operations" WHERE "Status"='posted'),'audit',(SELECT count(*) FROM "AuditEvents"),'signed',(SELECT sum(CASE WHEN "Type"='income' THEN "Amount" ELSE -"Amount" END) FROM "Operations" WHERE "Status"='posted'));`);
+const before=totals();
+run('pg_dump',['-Fc','-f','.runtime/backup-test.dump']);
+run('psql',['-v','ON_ERROR_STOP=1'],'DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+run('pg_restore',['--no-owner','.runtime/backup-test.dump']);
+const after=totals();assert.equal(after,before);
+fs.writeFileSync('.runtime/backup-verification.json',JSON.stringify({time:new Date().toISOString(),status:'passed',scope:'isolated PostgreSQL test database only',totals:JSON.parse(after)},null,2));
+console.log('PASS PostgreSQL custom-format backup and restore; operation count, posted count, audit count and signed totals match.');

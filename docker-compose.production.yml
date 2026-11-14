@@ -1,0 +1,109 @@
+services:
+  db:
+    image: postgres:18.3-alpine
+    environment:
+      POSTGRES_DB: faiza_cash
+      POSTGRES_USER: faiza_migrator
+      POSTGRES_PASSWORD: ${MIGRATION_DB_PASSWORD:?Set a deployment-only migration DB password}
+    volumes:
+      - postgres-production:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U faiza_migrator -d faiza_cash']
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    networks:
+      - data
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.migrator
+    environment:
+      ConnectionStrings__CashDb: Host=db;Database=faiza_cash;Username=faiza_migrator;Password=${MIGRATION_DB_PASSWORD:?Set a deployment-only migration DB password}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - data
+
+  provision-runtime:
+    image: postgres:18.3-alpine
+    entrypoint: ["/bin/sh", "-c", "psql -v ON_ERROR_STOP=1 -f /deploy/provision-runtime-role.sql"]
+    environment:
+      PGHOST: db
+      PGDATABASE: faiza_cash
+      PGUSER: faiza_migrator
+      PGPASSWORD: ${MIGRATION_DB_PASSWORD:?Set a deployment-only migration DB password}
+      FAIZA_RUNTIME_DB_PASSWORD: ${RUNTIME_DB_PASSWORD:?Set a separate runtime DB password}
+    volumes:
+      - ./deploy/provision-runtime-role.sql:/deploy/provision-runtime-role.sql:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+    networks:
+      - data
+
+  api:
+    build: ./backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__CashDb: Host=db;Database=faiza_cash;Username=faiza_runtime;Password=${RUNTIME_DB_PASSWORD:?Set a separate runtime DB password}
+      Jwt__Key: ${JWT__KEY:?Set a production JWT key}
+      Jwt__Issuer: FaizaCash
+      Jwt__Audience: FaizaCash
+      Seed__AdminLogin: ${SEED__ADMINLOGIN:-admin}
+      Seed__AdminPassword: ${SEED__ADMINPASSWORD:?Set a unique initial admin password}
+      Frontend__Origin: https://${FAIZA_DOMAIN:?Set FAIZA_DOMAIN}
+      ForwardedHeaders__KnownProxies__0: 172.30.2.2
+      ForwardedHeaders__ForwardLimit: 1
+      AllowedHosts: ${FAIZA_DOMAIN:?Set FAIZA_DOMAIN}
+      Logs__Directory: /tmp/faiza-logs
+    depends_on:
+      provision-runtime:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - data
+      - web
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    networks:
+      - web
+
+  proxy:
+    image: caddy:2.10-alpine
+    environment:
+      FAIZA_DOMAIN: ${FAIZA_DOMAIN:?Set FAIZA_DOMAIN to a public DNS name}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - frontend
+    restart: unless-stopped
+    networks:
+      web:
+        ipv4_address: 172.30.2.2
+
+networks:
+  data:
+    internal: true
+  web:
+    ipam:
+      config:
+        - subnet: 172.30.2.0/24
+
+volumes:
+  postgres-production:
+  caddy-data:
+  caddy-config:
